@@ -1,16 +1,19 @@
 /* ============================================================
  * Zen Video Backdrop — chrome styles
  *
- * The actual <video> element is created by js/zen-video-backdrop.uc.js
- * and inserted into #main-window as its FIRST child (so every existing
- * UI element renders on top of it).
+ * Actual DOM (created by js/zen-video-backdrop.uc.js):
  *
- * All visual knobs (fit, zoom, brightness, blur, fade, dim) are driven
- * from the Sine preferences via CSS custom properties set on
- * #main-window by the script.
+ *   #zen-video-backdrop
+ *     #zvb-stage
+ *       .zvb-loop                   ← one looper per playing file
+ *         video.zvb-loop-v1
+ *         video.zvb-loop-v2         ← two clones, same src
+ *       (during rotation: a second .zvb-loop fades in next to it)
+ *     .zvb-dim
  *
- * We avoid touching any selector that Nebula owns, so Nebula's
- * animations / glass / blur stack continues to apply on top of us.
+ * Looping pattern is borrowed from Bonjourr's VideoLooper:
+ *   v1 and v2 share src; when one approaches end (`isEnding`),
+ *   the other starts and the first fades out via .zvb-hiding.
  * ============================================================ */
 
 #zen-video-backdrop {
@@ -23,7 +26,24 @@
   background: transparent;
 }
 
-#zen-video-backdrop video {
+#zvb-stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* A looper holds the two cloned <video> elements for the current file.
+   It has its own opacity transition for inter-file crossfade. */
+.zvb-loop {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transition: opacity var(--zvb-fade, 600ms) linear;
+}
+
+.zvb-loop.zvb-entering { opacity: 0; }
+.zvb-loop.zvb-leaving  { opacity: 0; }
+
+.zvb-loop video {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -36,7 +56,7 @@
   opacity: 1;
 }
 
-#zen-video-backdrop video.zvb-hiding {
+.zvb-loop video.zvb-hiding {
   opacity: 0;
 }
 
