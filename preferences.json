@@ -1,0 +1,167 @@
+[
+  {
+    "type": "text",
+    "label": "🎬 Zen Video Backdrop",
+    "margin": "30px 0 10px 0",
+    "size": "20px"
+  },
+  {
+    "type": "text",
+    "label": "Scans a local folder for .mp4 / .webm / .mov files and plays them looping behind the entire Zen UI. Use Bonjourr's background set to <b>None</b> / <b>Color</b> with a transparent color so Bonjourr stays out of the way; Nebula keeps all its glass / animation effects on top.",
+    "margin": "0 0 20px 0",
+    "size": "13px"
+  },
+
+  {
+    "type": "separator",
+    "label": "📂 Source folder",
+    "margin": "10px 0 10px 0"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.videos-dir",
+    "label": "Folder with videos",
+    "value": "string",
+    "defaultValue": "D:\\Users\\user\\Videos\\zen",
+    "placeholder": "D:\\Users\\user\\Videos\\zen"
+  },
+  {
+    "type": "text",
+    "label": "Absolute path. New files are picked up automatically the next time the video rotates (or on Zen restart).",
+    "margin": "0 0 10px 0",
+    "size": "12px"
+  },
+  {
+    "type": "checkbox",
+    "property": "zen-video-backdrop.randomize",
+    "label": "Pick next video randomly (otherwise cycle in filename order)",
+    "defaultValue": true
+  },
+
+  {
+    "type": "separator",
+    "label": "🔁 Rotation",
+    "margin": "15px 0 10px 0"
+  },
+  {
+    "type": "dropdown",
+    "property": "zen-video-backdrop.frequency",
+    "label": "Change video",
+    "value": "string",
+    "defaultValue": "tabs",
+    "placeholder": false,
+    "options": [
+      { "label": "Never (pause)",       "value": "pause" },
+      { "label": "Every new tab page",  "value": "tabs"  },
+      { "label": "Every N minutes",     "value": "period"},
+      { "label": "Every hour",          "value": "hour"  },
+      { "label": "Every day",           "value": "day"   }
+    ]
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.period-minutes",
+    "label": "Period (minutes), when 'Every N minutes' is selected",
+    "value": "number",
+    "defaultValue": 15,
+    "placeholder": "15"
+  },
+
+  {
+    "type": "separator",
+    "label": "🎚️ Look & feel",
+    "margin": "15px 0 10px 0"
+  },
+  {
+    "type": "dropdown",
+    "property": "zen-video-backdrop.fit",
+    "label": "Fit",
+    "value": "string",
+    "defaultValue": "cover",
+    "placeholder": false,
+    "options": [
+      { "label": "Cover (fill, crop)",          "value": "cover"   },
+      { "label": "Contain (fit, letterbox)",    "value": "contain" },
+      { "label": "Fill (stretch)",              "value": "fill"    },
+      { "label": "None (original size)",        "value": "none"    }
+    ]
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.zoom-percent",
+    "label": "Zoom (%)",
+    "value": "number",
+    "defaultValue": 100,
+    "placeholder": "100"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.brightness-percent",
+    "label": "Brightness (%, 0–200)",
+    "value": "number",
+    "defaultValue": 100,
+    "placeholder": "100"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.blur-px",
+    "label": "Blur (px)",
+    "value": "number",
+    "defaultValue": 0,
+    "placeholder": "0"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.dim-percent",
+    "label": "Dim overlay (%, 0–100)",
+    "value": "number",
+    "defaultValue": 0,
+    "placeholder": "0"
+  },
+
+  {
+    "type": "separator",
+    "label": "⏯️ Playback",
+    "margin": "15px 0 10px 0"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.fade-ms",
+    "label": "Fade-in / cross-fade duration (ms)",
+    "value": "number",
+    "defaultValue": 600,
+    "placeholder": "600"
+  },
+  {
+    "type": "string",
+    "property": "zen-video-backdrop.playback-rate-percent",
+    "label": "Playback speed (%, 50–200)",
+    "value": "number",
+    "defaultValue": 100,
+    "placeholder": "100"
+  },
+  {
+    "type": "checkbox",
+    "property": "zen-video-backdrop.mute",
+    "label": "Mute",
+    "defaultValue": true
+  },
+
+  {
+    "type": "separator",
+    "label": "🪟 Transparency",
+    "margin": "15px 0 10px 0"
+  },
+  {
+    "type": "checkbox",
+    "property": "zen-video-backdrop.transparent-newtab",
+    "label": "Make the browser content layer transparent (so Bonjourr / about: pages let the video through)",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "After toggling this, set Bonjourr's background to <b>None</b> or to a transparent color. Nebula's chrome glass continues to work on top — this mod doesn't touch Nebula.",
+    "margin": "0 0 10px 0",
+    "size": "12px"
+  }
+]

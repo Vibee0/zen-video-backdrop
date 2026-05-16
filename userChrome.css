@@ -1,0 +1,73 @@
+/* ============================================================
+ * Zen Video Backdrop — chrome styles
+ *
+ * The actual <video> element is created by js/zen-video-backdrop.uc.js
+ * and inserted into #main-window as its FIRST child (so every existing
+ * UI element renders on top of it).
+ *
+ * All visual knobs (fit, zoom, brightness, blur, fade, dim) are driven
+ * from the Sine preferences via CSS custom properties set on
+ * #main-window by the script.
+ *
+ * We avoid touching any selector that Nebula owns, so Nebula's
+ * animations / glass / blur stack continues to apply on top of us.
+ * ============================================================ */
+
+#zen-video-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -2147483647;
+  background: transparent;
+}
+
+#zen-video-backdrop video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: var(--zvb-fit, cover);
+  transform: scale(var(--zvb-zoom, 1));
+  transform-origin: center center;
+  filter: brightness(var(--zvb-brightness, 1)) blur(var(--zvb-blur, 0px));
+  transition: opacity var(--zvb-fade, 600ms) linear;
+  opacity: 1;
+}
+
+#zen-video-backdrop video.zvb-hiding {
+  opacity: 0;
+}
+
+#zen-video-backdrop > .zvb-dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, var(--zvb-dim-alpha, 0));
+}
+
+/* ---------------- Optional: make the content layer transparent ----------------
+ *
+ * Enabled when #main-window has the attribute zvb-transparent-content.
+ * Without this, the <browser> element is opaque and the video can't be
+ * seen behind page content. We only override the *outer* browser/tab
+ * widgets — page CSS still controls the page's own background, so any
+ * page that doesn't paint a background (e.g. Bonjourr with background
+ * type "None"/"Color" set to transparent) becomes see-through.
+ */
+
+#main-window[zvb-transparent-content="true"] #tabbrowser-tabbox,
+#main-window[zvb-transparent-content="true"] #tabbrowser-tabpanels,
+#main-window[zvb-transparent-content="true"] .browserStack,
+#main-window[zvb-transparent-content="true"] browser[type="content"],
+#main-window[zvb-transparent-content="true"] browser[type="content-primary"] {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+#main-window[zvb-transparent-content="true"] #browser,
+#main-window[zvb-transparent-content="true"] #appcontent,
+#main-window[zvb-transparent-content="true"] #content-deck {
+  background-color: transparent !important;
+}
