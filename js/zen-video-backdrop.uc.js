@@ -2,7 +2,7 @@
 // @name           zen-video-backdrop.uc.js
 // @description    Plays looping videos from a local folder behind the entire Zen UI.
 // @author         Vibee0
-// @version        0.1.0
+// @version        0.2.0
 // @include        main
 // @grant          none
 // ==/UserScript==
@@ -17,6 +17,7 @@
   const PREF_PREFIX = "zen-video-backdrop.";
   const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov", ".m4v", ".ogv", ".ogg"];
   const LOG_PREFIX = "[zen-video-backdrop]";
+  const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
   const log  = (...a) => console.log(LOG_PREFIX, ...a);
   const warn = (...a) => console.warn(LOG_PREFIX, ...a);
@@ -142,33 +143,219 @@
     return files[(idx + 1) % files.length];
   }
 
+  // -------- VideoLooper -------------------------------------------------
+  //
+  // Mirrors Bonjourr's `src/scripts/features/backgrounds/VideoLooper.ts`.
+  //
+  // Two <video> elements share the SAME src. As one approaches the end
+  // (within `fadeMs`), the other starts playing from t=0 and the first
+  // fades out. When the first ends, it rewinds and goes to the back of
+  // the DOM (so it's behind the now-playing one). This produces a
+  // seamless loop without the visible cut you get from `video.loop=true`.
+  //
+  // If `fadeMs === 0` we skip all of that and just use the native
+  // HTMLVideoElement `loop` attribute on a single video (Bonjourr does
+  // the same).
+
+  class VideoLooper {
+    constructor(doc, src, fadeMs, playbackRate, muted) {
+      this.doc = doc;
+      this.win = doc.defaultView;
+      this.src = src;
+      this.fadeMs = Math.max(0, fadeMs);
+      this.playbackRate = playbackRate;
+      this.muted = muted;
+      this.destroyed = false;
+
+      this.container = doc.createElementNS(XHTML_NS, "div");
+      this.container.classList.add("zvb-loop");
+
+      this.video1 = this._createVideo();
+      this.video2 = this._createVideo();
+      this.video1.classList.add("zvb-loop-v1");
+      this.video2.classList.add("zvb-loop-v2");
+
+      this.container.appendChild(this.video1);
+      this.container.appendChild(this.video2);
+
+      this._onV1TimeUpdate = () => this._onTimeUpdate(this.video1, this.video2);
+      this._onV2TimeUpdate = () => this._onTimeUpdate(this.video2, this.video1);
+      this._onVisibility   = () => this._onVisibilityChange();
+      this._onFocus        = () => this._onVisibilityChange();
+      this._onPause1       = () => this._maybeResumeAfterPause(this.video1);
+      this._onPause2       = () => this._maybeResumeAfterPause(this.video2);
+    }
+
+    _createVideo() {
+      const v = this.doc.createElementNS(XHTML_NS, "video");
+      v.src = this.src;
+      v.muted = this.muted;
+      v.playsInline = true;
+      v.autoplay = false;
+      v.preload = "auto";
+      v.playbackRate = this.playbackRate;
+      v.setAttribute("disablepictureinpicture", "true");
+
+      v.addEventListener("loadedmetadata", () => this._applyFadeTime());
+      v.addEventListener("ratechange",     () => this._applyFadeTime());
+
+      v.addEventListener("ended", () => {
+        v.currentTime = 0;
+        v.classList.remove("zvb-hiding");
+        // Move ended video to the back of the DOM order so the still-playing
+        // sibling renders on top during the fade.
+        try { this.container.prepend(v); } catch (_) {}
+      });
+
+      return v;
+    }
+
+    start() {
+      this.video1.addEventListener("timeupdate", this._onV1TimeUpdate);
+      this.video2.addEventListener("timeupdate", this._onV2TimeUpdate);
+      this.video1.addEventListener("pause", this._onPause1);
+      this.video2.addEventListener("pause", this._onPause2);
+
+      this.doc.addEventListener("visibilitychange", this._onVisibility);
+      this.win.addEventListener("focus", this._onFocus);
+
+      this._applyFadeTime();
+      // Kick off playback. Mirrors Bonjourr's `loop()` which plays video2 first.
+      this._play(this.video2);
+    }
+
+    _onTimeUpdate(current, other) {
+      if (this.destroyed) return;
+      if (this.fadeMs === 0) return;
+      if (!this._isEnding(current)) return;
+      if (other.classList.contains("zvb-hiding") === false && !other.paused) {
+        // already crossfading
+        return;
+      }
+      current.classList.add("zvb-hiding");
+      other.classList.remove("zvb-hiding");
+      this._play(other);
+    }
+
+    _isEnding(v) {
+      if (!isFinite(v.duration) || v.duration === 0) return false;
+      const ct  = (v.currentTime * 1000) / Math.max(0.01, this.playbackRate);
+      const dur = (v.duration    * 1000) / Math.max(0.01, this.playbackRate);
+      return ct > dur - this.fadeMs;
+    }
+
+    _applyFadeTime() {
+      // Cap fade to half the (scaled) real duration so we never overshoot.
+      const realDur = this._getRealDuration();
+      const halfMs = Math.round((realDur / 2) * 1000);
+      let fade = this.fadeMs;
+      if (halfMs > 0 && halfMs < this.fadeMs) fade = halfMs;
+
+      if (fade === 0) {
+        this.video2.loop = true;
+        this.video1.style.display = "none";
+      } else {
+        this.video2.loop = false;
+        this.video1.style.display = "";
+      }
+      this.container.style.setProperty("--zvb-fade", `${fade}ms`);
+    }
+
+    _getRealDuration() {
+      try {
+        if (isFinite(this.video1.duration) && this.video1.duration > 0) {
+          return this.video1.duration / Math.max(0.01, this.video1.playbackRate);
+        }
+      } catch (_) {}
+      return 8;
+    }
+
+    _onVisibilityChange() {
+      if (this.destroyed) return;
+      if (!this.video2.isConnected) return;
+
+      if (this.doc.hidden) {
+        // Just pause; we'll resume the visible one when we come back.
+        try { this.video1.pause(); } catch (_) {}
+        try { this.video2.pause(); } catch (_) {}
+      } else {
+        // Pick whichever video is currently visible.
+        const visible = this.video1.classList.contains("zvb-hiding") ? this.video2 : this.video1;
+        this._play(visible);
+      }
+    }
+
+    _maybeResumeAfterPause(v) {
+      if (this.destroyed) return;
+      if (this.doc.hidden) return;
+      if (v.classList.contains("zvb-hiding")) return; // expected to be paused
+      if (v.ended) return; // ended handler will restart it
+      // Firefox sometimes pauses media when the window is occluded/restored;
+      // resume the currently-visible video.
+      this._play(v);
+    }
+
+    _play(v) {
+      try {
+        const p = v.play();
+        if (p && typeof p.then === "function") {
+          p.catch(e => warn("play() rejected", e?.name || e));
+        }
+      } catch (e) {
+        warn("play() threw", e);
+      }
+    }
+
+    setPlaybackRate(rate) {
+      this.playbackRate = rate;
+      this.video1.playbackRate = rate;
+      this.video2.playbackRate = rate;
+    }
+
+    setMute(muted) {
+      this.muted = muted;
+      this.video1.muted = muted;
+      this.video2.muted = muted;
+    }
+
+    setFadeMs(fadeMs) {
+      this.fadeMs = Math.max(0, fadeMs);
+      this._applyFadeTime();
+    }
+
+    destroy() {
+      if (this.destroyed) return;
+      this.destroyed = true;
+      try { this.video1.removeEventListener("timeupdate", this._onV1TimeUpdate); } catch (_) {}
+      try { this.video2.removeEventListener("timeupdate", this._onV2TimeUpdate); } catch (_) {}
+      try { this.video1.removeEventListener("pause", this._onPause1); } catch (_) {}
+      try { this.video2.removeEventListener("pause", this._onPause2); } catch (_) {}
+      try { this.doc.removeEventListener("visibilitychange", this._onVisibility); } catch (_) {}
+      try { this.win.removeEventListener("focus", this._onFocus); } catch (_) {}
+      try { this.video1.pause(); } catch (_) {}
+      try { this.video2.pause(); } catch (_) {}
+      try { this.video1.removeAttribute("src"); this.video1.load(); } catch (_) {}
+      try { this.video2.removeAttribute("src"); this.video2.load(); } catch (_) {}
+      try { this.container.remove(); } catch (_) {}
+    }
+  }
+
   // -------- DOM injection ----------------------------------------------
 
   function createBackdrop(doc) {
-    const root = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    const root = doc.createElementNS(XHTML_NS, "div");
     root.id = "zen-video-backdrop";
 
-    const v1 = doc.createElementNS("http://www.w3.org/1999/xhtml", "video");
-    const v2 = doc.createElementNS("http://www.w3.org/1999/xhtml", "video");
-    for (const v of [v1, v2]) {
-      v.autoplay = true;
-      v.muted = true;
-      v.loop = true;
-      v.playsInline = true;
-      v.preload = "auto";
-      v.setAttribute("disablepictureinpicture", "true");
-    }
-    v1.classList.add("zvb-active");
-    v2.classList.add("zvb-hiding");
+    const stage = doc.createElementNS(XHTML_NS, "div");
+    stage.id = "zvb-stage";
 
-    const dim = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    const dim = doc.createElementNS(XHTML_NS, "div");
     dim.className = "zvb-dim";
 
-    root.appendChild(v1);
-    root.appendChild(v2);
+    root.appendChild(stage);
     root.appendChild(dim);
 
-    return { root, v1, v2, dim };
+    return { root, stage, dim };
   }
 
   function applyCssVars(mainWindow, cfg) {
@@ -193,9 +380,9 @@
     cfg: null,
     files: [],
     current: null,           // {name, path, url}
-    activeVideoEl: null,
-    inactiveVideoEl: null,
+    looper: null,            // VideoLooper instance for the current file
     rootEl: null,
+    stageEl: null,
     dimEl: null,
     mainWindow: null,
     rotationTimer: null,
@@ -215,16 +402,13 @@
         this.cfg = readConfig();
         log("init, cfg =", this.cfg);
 
-        const { root, v1, v2, dim } = createBackdrop(document);
+        const { root, stage, dim } = createBackdrop(document);
         this.rootEl = root;
-        this.activeVideoEl = v1;
-        this.inactiveVideoEl = v2;
+        this.stageEl = stage;
         this.dimEl = dim;
         this.mainWindow.insertBefore(root, this.mainWindow.firstChild);
 
         applyCssVars(this.mainWindow, this.cfg);
-        this.applyVideoElProps(this.activeVideoEl);
-        this.applyVideoElProps(this.inactiveVideoEl);
 
         this.rescan();
         this.bootstrapCurrent();
@@ -237,11 +421,6 @@
       } catch (e) {
         err("init failed", e);
       }
-    },
-
-    applyVideoElProps(v) {
-      v.muted = this.cfg.mute;
-      v.playbackRate = this.cfg.playbackRatePct / 100;
     },
 
     rescan() {
@@ -269,43 +448,44 @@
 
     setCurrent(file, fade = true) {
       if (!file) return;
-      if (this.current && this.current.url === file.url) {
-        // restart muted on same file — keep playing
+      if (this.current && this.current.url === file.url && this.looper && !this.looper.destroyed) {
+        // same file already playing — nothing to do
         return;
       }
       this.current = file;
       log("→", file.name);
 
-      if (!fade || this.cfg.fadeMs === 0) {
-        this.activeVideoEl.src = file.url;
-        try { this.activeVideoEl.play(); } catch (_) {}
-        this.inactiveVideoEl.classList.add("zvb-hiding");
-        this.inactiveVideoEl.classList.remove("zvb-active");
+      const newLooper = new VideoLooper(
+        document,
+        file.url,
+        this.cfg.fadeMs,
+        this.cfg.playbackRatePct / 100,
+        this.cfg.mute,
+      );
+
+      // Insert new looper into the stage. CSS gives `.zvb-loop` a transition
+      // on opacity, so adding it with the .zvb-entering class (opacity 0)
+      // and then removing the class on the next frame produces a fade-in.
+      newLooper.container.classList.add("zvb-entering");
+      this.stageEl.appendChild(newLooper.container);
+      newLooper.start();
+
+      const oldLooper = this.looper;
+      this.looper = newLooper;
+
+      if (!fade || this.cfg.fadeMs === 0 || !oldLooper) {
+        // No fade — just kill the old one.
+        newLooper.container.classList.remove("zvb-entering");
+        if (oldLooper) oldLooper.destroy();
       } else {
-        const incoming = this.inactiveVideoEl;
-        const outgoing = this.activeVideoEl;
-
-        incoming.src = file.url;
-        incoming.classList.add("zvb-hiding");
-        try { incoming.play(); } catch (_) {}
-
-        // next frame: swap classes to fade
+        // Crossfade between old and new looper containers.
         window.requestAnimationFrame(() => {
-          incoming.classList.remove("zvb-hiding");
-          incoming.classList.add("zvb-active");
-          outgoing.classList.add("zvb-hiding");
-          outgoing.classList.remove("zvb-active");
+          newLooper.container.classList.remove("zvb-entering");
+          oldLooper.container.classList.add("zvb-leaving");
         });
-
-        // after fade: pause outgoing
         setTimeout(() => {
-          try { outgoing.pause(); } catch (_) {}
-          outgoing.removeAttribute("src");
-          try { outgoing.load(); } catch (_) {}
+          try { oldLooper.destroy(); } catch (_) {}
         }, this.cfg.fadeMs + 100);
-
-        this.activeVideoEl = incoming;
-        this.inactiveVideoEl = outgoing;
       }
 
       setString("state.last-played-url", file.url);
@@ -334,8 +514,12 @@
         log("pref changed:", data, "→ new cfg");
 
         applyCssVars(this.mainWindow, this.cfg);
-        this.applyVideoElProps(this.activeVideoEl);
-        this.applyVideoElProps(this.inactiveVideoEl);
+
+        if (this.looper) {
+          this.looper.setPlaybackRate(this.cfg.playbackRatePct / 100);
+          this.looper.setMute(this.cfg.mute);
+          this.looper.setFadeMs(this.cfg.fadeMs);
+        }
 
         if (oldCfg.videosDir !== this.cfg.videosDir) {
           this.rescan();
@@ -409,6 +593,7 @@
       } catch (_) {}
       if (this.rotationTimer) clearInterval(this.rotationTimer);
       if (this.rescanTimer)   clearInterval(this.rescanTimer);
+      try { this.looper?.destroy(); } catch (_) {}
       try { this.rootEl?.remove(); } catch (_) {}
       try { this.mainWindow?.removeAttribute("zvb-transparent-content"); } catch (_) {}
       log("destroyed");

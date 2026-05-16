@@ -4,9 +4,9 @@
   "author": "Vibee0",
   "name": "Zen Video Backdrop",
   "description": "Plays looping videos from a local folder behind the entire Zen UI. Mirrors Bonjourr's video background settings (frequency, fit, zoom, brightness, blur, fade, playback rate, mute) so you can use Bonjourr/Nebula on top without them having to play any video themselves.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "createdAt": "2026-05-15",
-  "updatedAt": "2026-05-15",
+  "updatedAt": "2026-05-16",
   "readme": "https://raw.githubusercontent.com/Vibee0/zen-video-backdrop/main/README.md",
   "style": {
     "chrome": "userChrome.css",
